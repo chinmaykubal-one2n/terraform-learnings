@@ -105,3 +105,63 @@ resource "aws_route_table_association" "private_rt_assoc_2" {
   subnet_id      = aws_subnet.private_subnet_2.id
   route_table_id = aws_route_table.private_rt.id
 }
+
+resource "aws_security_group" "nginx_sg" {
+  name        = "nginx-sg"
+  description = "Allow HTTP and SSH"
+  vpc_id      = aws_vpc.demo_vpc.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    "Name" = "nginx-sg"
+  }
+}
+
+resource "aws_launch_template" "nginx_lt" {
+  name                    = "nginx-lt"
+  image_id                = "ami-04b4f1a9cf54c11d0"
+  instance_type           = "t3.small"
+  disable_api_stop        = true
+  disable_api_termination = true
+  user_data               = filebase64("install.sh")
+  vpc_security_group_ids  = [aws_security_group.nginx_sg.id]
+  tags = {
+    "Name" = "nginx-lt"
+  }
+}
+
+resource "aws_autoscaling_group" "nginx_asg" {
+  name = "nginx-asg"
+  launch_template {
+    name = aws_launch_template.nginx_lt.name
+  }
+  min_size            = 2
+  max_size            = 2
+  desired_capacity    = 2
+  vpc_zone_identifier = [aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id]
+  tag {
+    key                 = "Name"
+    value               = "nginx-asg"
+    propagate_at_launch = true
+  }
+}
