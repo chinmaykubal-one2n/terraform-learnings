@@ -2,3 +2,5 @@
 .terraform.*
 terraform.*
 note.txt
+demo.tf
+rds/
