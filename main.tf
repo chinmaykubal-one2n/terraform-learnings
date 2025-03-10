@@ -311,4 +311,35 @@ resource "aws_autoscaling_attachment" "private_asg_attachment" {
   lb_target_group_arn    = aws_lb_target_group.private_tg.arn
 }
 
+resource "aws_db_instance" "default_postgres" {
+  allocated_storage          = 20
+  identifier                 = "default-postgres"
+  storage_type               = "gp3"
+  engine                     = "postgres"
+  engine_version             = "17.2"
+  instance_class             = "db.t3.medium"
+  db_name                    = "defaultdb"
+  username                   = "db_user"
+  password                   = "db_password"
+  publicly_accessible        = false
+  skip_final_snapshot        = true
+  apply_immediately          = true
+  auto_minor_version_upgrade = true
+  deletion_protection        = false
+  multi_az                   = false
+  port                       = 5432
+  vpc_security_group_ids     = [aws_security_group.nginx_sg.id]
+  db_subnet_group_name       = aws_db_subnet_group.custom_db_subnet_group.name
+  tags = {
+    "Name" = "default-postgres"
+  }
+}
+
+resource "aws_db_subnet_group" "custom_db_subnet_group" {
+  name       = "custom-db-subnet-group"
+  subnet_ids = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
+  tags = {
+    "Name" = "custom-db-subnet-group"
+  }
+}
 # # ALWAYS READ note,txt BEFORE STARTING TO WRITE THE CODE
