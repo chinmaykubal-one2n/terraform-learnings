@@ -122,6 +122,12 @@ resource "aws_security_group" "nginx_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -219,4 +225,90 @@ resource "aws_autoscaling_attachment" "asg_attachment" {
   lb_target_group_arn    = aws_lb_target_group.nginx_tg.arn
 }
 
-# ALWAYS READ note,txt BEFORE STARTING TO WRITE THE CODE
+resource "aws_launch_template" "private_lt" {
+  name                    = "private-lt"
+  image_id                = "ami-04b4f1a9cf54c11d0"
+  instance_type           = "t3.small"
+  disable_api_stop        = true
+  disable_api_termination = true
+  user_data               = filebase64("install.sh")
+  vpc_security_group_ids  = [aws_security_group.nginx_sg.id]
+  tags = {
+    "Name" = "private-lt"
+  }
+}
+
+resource "aws_autoscaling_group" "private_asg" {
+  name = "private-asg"
+  launch_template {
+    name = aws_launch_template.private_lt.name
+  }
+  min_size            = 2
+  max_size            = 2
+  desired_capacity    = 2
+  vpc_zone_identifier = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
+  tag {
+    key                 = "Name"
+    value               = "private-asg"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_lb" "private_lb" {
+  name                       = "private-lb"
+  internal                   = true
+  load_balancer_type         = "application"
+  security_groups            = [aws_security_group.nginx_sg.id]
+  subnets                    = [aws_subnet.private_subnet_1.id, aws_subnet.private_subnet_2.id]
+  enable_deletion_protection = false
+
+  tags = {
+    "Name" = "private-lb"
+  }
+}
+
+resource "aws_lb_target_group" "private_tg" {
+  name                              = "private-tg"
+  vpc_id                            = aws_vpc.vpc.id
+  target_type                       = "instance"
+  port                              = 80
+  protocol                          = "HTTP"
+  protocol_version                  = "HTTP1"
+  deregistration_delay              = 300
+  load_balancing_algorithm_type     = "round_robin"
+  load_balancing_cross_zone_enabled = "use_load_balancer_configuration"
+  slow_start                        = "0"
+  health_check {
+    enabled             = true
+    interval            = 30
+    path                = "/"
+    port                = "traffic-port"
+    timeout             = 5
+    healthy_threshold   = 5
+    unhealthy_threshold = 2
+    matcher             = "200"
+  }
+  tags = {
+    "Name" = "private-tg"
+  }
+}
+
+resource "aws_lb_listener" "private_listener" {
+  load_balancer_arn = aws_lb.private_lb.arn
+  port              = "80"
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.private_tg.arn
+  }
+  tags = {
+    "Name" = "private-listener"
+  }
+}
+
+resource "aws_autoscaling_attachment" "private_asg_attachment" {
+  autoscaling_group_name = aws_autoscaling_group.private_asg.name
+  lb_target_group_arn    = aws_lb_target_group.private_tg.arn
+}
+
+# # ALWAYS READ note,txt BEFORE STARTING TO WRITE THE CODE
